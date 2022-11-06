@@ -1,0 +1,7 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: run-full-pipeline-
+  annotations: {pipelines.kubeflow.org/pipeline_spec: '{"description": "This pipeline use kaniko download code from GITHUB to build docker image for run"'}
+
+

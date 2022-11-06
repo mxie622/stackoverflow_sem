@@ -1,0 +1,197 @@
+------------ switch admin of mongo
+#  切换到admin
+use admin
+
+# 添加管理员
+db.createUser({
+  user: 'root',
+  pwd: 'test1234',
+  roles: [{ role: 'root', db: 'admin' }],
+})
+
+------------ MongoDB 链接
+mongodb://root:test1234@localhost:27017/admin
+
+------------
+# //mongo mongo-express
+# start mongo db
+docker run -p 27017:27017 -d -e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=test1234 --name mongodb --net mongo-network mongo 
+
+# start mongo-express
+/* docker run -it --rm \
+    --network web_default \
+    --name mongo-express \
+    -p 8081:8081 \
+    -e ME_CONFIG_OPTIONS_EDITORTHEME="ambiance" \
+    -e ME_CONFIG_MONGODB_SERVER="web_db_1" \
+    -e ME_CONFIG_BASICAUTH_USERNAME="user" \
+    -e ME_CONFIG_BASICAUTH_PASSWORD="fairly long password" \
+    mongo-express */
+docker run -d \
+-p 8081:8081 \
+-e ME_CONFIG_MONGODB_ADMINUSERNAME=admin \
+-e ME_CONFIG_MONGODB_ADMINPASSWORD=test1234 \
+--net mongo-network \
+--name mongo-express \
+-e ME_CONFIG_MONGODB_SERVER=mongodb \
+mongo-express
+
+
+------------
+# docker push dockerhub: https://www.thecodebuzz.com/docker-denied-requested-access-to-the-resource-is-denied/
+docker image tag hupu-base:1.0 hupu/hupu-base:1.0
+
+------------
+# 用容器编译go文件，举例
+docker run -it -v /Users/mikexie/codes/web/:/opt/web/ -e GOPROXY=https://goproxy.cn  golang:latest bash -c "cd /opt/web/; go build ."
+
+------------
+# 容器打印环境变量，'--rm' 启动容器运行后删除
+docker container run --rm -it -p 9999:80 -e REDIS_ADDR=redis --link=redis --entrypoint env web:0.0.2
+------------
+# // check inside container
+docker container inspect fbe87b19e898
+# // copy files from container
+docker cp 8dfde645c38c:/home/hupu/test_abc.txt /Users/mikexie/ 
+docker cp 657df0880148:/home/hupu/hupu_elbow_plot.png /Users/mikexie/ 
+------------
+FROM python:latest
+
+ENV MONGO_DB_USERNAME=admin \
+    MONGO_DB_PWD=password
+
+COPY ./app /home/hupu
+ENV TITLE="hupu"
+ENV PIPELINE="train"
+ENV PIPELINE_START_MONTH=202202
+ENV PIPELINE_END_MONTH=202203 
+# ENV TRAIN_MODEL_ID=""
+ENV TRAIN_MODEL_ID="kmeans_model_{title}.pkl"  
+ENV FEATURE_MAPPING="hupu_feature_mapping.csv" 
+ENV INPUT_DATASET=${BASH_DIR}
+ENV OUTPUT_DATASET=${BASH_DIR}
+
+
+RUN pip install --upgrade pip
+RUN mkdir -p /home/hupu
+# COPY ./app /home/hupu
+RUN pip install -r /home/hupu/requirements.txt
+CMD [ "python", "/home/hupu/lc.py"]
+ENTRYPOINT ${BASH_DIR}/run_pipeline.sh
+
+# docker build -t my-app:2.0 .
+# docker run my-app:2.0 # docker run -t train-hupu:1.0 -v /Users/mikexie/hupu/:/.
+
+# // keep container running
+# docker run -d ubuntu tail -f /dev/null
+CMD ${ROOT_DIR}/run_pipeline.sh
+ENTRYPOINT ["tail", "-f", "/dev/null"]
+
+# Error response from daemon: conflict: unable to delete  (must be forced) - image 2938e0bbe9a7 being used by stopped container d2b3c3c6e6c1
+# //remove container first
+# docker rm d2b3c3c6e6c1
+
+# //then remove the image
+# docker rmi 2938e0bbe9a7
+
+# //stop all containers
+# docker rm $(docker ps -a -q)
+
+# //login docker hub
+# docker login -u moshu
+
+# //change tag of image for push 
+# docker image tag my-app moshu/my-app:latest
+
+# //push
+# docker image push moshu/my-app:latest 
+
+# //运行Neo4j 容器
+# docker run -it -d -p 7474:7474 -p 7687:7687 neo4j:latest
+
+# //进入容器内部
+docker exec -it dcd3f85ed3a3 /bin/bash
+
+# //打开Neo4j 浏览器管理界面
+# http://localhost:7474
+# //username:neo4j    password:test1234
+
+# //Check volume in container 
+# docker run -it --privileged --pid=host justincormack/nsenter1
+# ls /var/lib/docker/volumes/
+# //exit
+# exit
+
+# //k8s dashboard
+# sudo minikube dashboard
+# sudo kubectl get pods,rs,deployments
+
+--------------------
+FROM ubuntu:latest
+
+RUN apt-get update -y
+RUN apt-get install -y python3
+RUN apt-get install python3-pip -y
+RUN apt-get install -y procps
+RUN apt-get install -y -qq curl
+RUN curl -o /usr/local/bin/jq https://stedolan.github.io/jq/download/linux64/jq && chmod +x /usr/local/bin/jq
+
+RUN python3 -V
+RUN python3 -m pip install virtualenv
+RUN virtualenv -p python3 /env
+
+ENV VIRTUAL_ENV /env
+ENV PATH /env/bin:$PATH
+
+ENV SRC_DIR .
+ENV ROOT_DIR /home/hupu
+ENV PACKAGES_DIR ${ROOT_DIR}/packages
+ENV BUILD_DIR ${ROOT_DIR}
+ENV BASH_DIR ${ROOT_DIR}/bash
+
+RUN mkdir ${ROOT_DIR}
+RUN mkdir ${BASH_DIR}
+COPY ${SRC_DIR}/requirements.txt ${BUILD_DIR}
+
+WORKDIR ${ROOT_DIR}
+
+RUN pip install --upgrade pip
+RUN pip install -r ${BUILD_DIR}/requirements.txt
+--------------------------
+
+#!/bin/bash
+
+function mbd_gen {
+    python3 /home/hupu/python/run_mbd.py \
+    --pipeline_start_month=$PIPELINE_START_MONTH \
+    --pipeline_end_month=$PIPELINE_END_MONTH \
+    --title=$TITLE \
+    --input_dataset=$INPUT_DATASET \
+    --output_dataset=$OUTPUT_DATASET
+}
+
+function feature_gen {
+    python /home/hupu/python/run_feature.py \
+    --title=$TITLE \
+    --input_dataset=$INPUT_DATASET \
+    --output_dataset=$OUTPUT_DATASET
+}
+
+function train {
+    python /home/hupu/python/run_train.py \
+    --title=$TITLE
+}
+
+function predict {
+    python /home/hupu/python/run_predict.py \
+    --title=$TITLE
+}
+
+function pipeline_common_flags {
+#    local -n flags=$1
+    flags=()
+    flags+=(--title=$TITLE)
+    flags+=(--pipeline=$PIPELINE)
+    flags+=(--pipeline_start_month=$PIPELINE_START_MONTH)
+    flags+=(--pipeline_end_month=$PIPELINE_END_MONTH)
+}
